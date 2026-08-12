@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>faizgtg — AI Assistant</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  :root {
+    --deep: #04101c;
+    --ocean1: #052e4a;
+    --ocean2: #0a4e6e;
+    --accent: #22d3ee;
+    --accent2: #34d399;
+    --bubble-user: linear-gradient(135deg, #22d3ee, #0891b2);
+    --bubble-bot: rgba(255,255,255,0.06);
+    --text: #e6f7ff;
+    --muted: #7fa8bd;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: radial-gradient(circle at 20% 0%, var(--ocean2), var(--deep) 60%);
+    color: var(--text);
+    overflow: hidden;
+  }
+  /* Gelembung dekoratif */
+  .bubbles {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .bubble {
+    position: absolute;
+    bottom: -60px;
+    width: 14px;
+    height: 14px;
+    background: rgba(34, 211, 238, 0.25);
+    border-radius: 50%;
+    animation: rise linear infinite;
+  }
+  @keyframes rise {
+    0%   { transform: translateY(0) translateX(0); opacity: 0; }
+    10%  { opacity: 0.8; }
+    100% { transform: translateY(-110vh) translateX(20px); opacity: 0; }
+  }
+
+  .app {
+    position: relative;
+    z-index: 1;
+    max-width: 720px;
+    margin: 0 auto;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 18px 20px;
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 0 18px rgba(34,211,238,0.5);
+  }
+  header h1 { margin: 0; font-size: 17px; }
+  header p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent2);
+    display: inline-block;
+    margin-right: 5px;
+    box-shadow: 0 0 6px var(--accent2);
+  }
+
+  #chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  #chat::-webkit-scrollbar { width: 6px; }
+  #chat::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+
+  .msg {
+    max-width: 78%;
+    padding: 11px 15px;
+    border-radius: 16px;
+    line-height: 1.5;
+    font-size: 14.5px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    animation: pop .18s ease;
+  }
+  @keyframes pop { from { transform: scale(.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+  .msg.user {
+    align-self: flex-end;
+    background: var(--bubble-user);
+    color: #052e4a;
+    font-weight: 500;
+    border-bottom-right-radius: 4px;
+  }
+  .msg.bot {
+    align-self: flex-start;
+    background: var(--bubble-bot);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-bottom-left-radius: 4px;
+    white-space: normal; /* penting: biar HTML hasil markdown tampil normal, bukan mentah */
+  }
+
+  /* Styling untuk hasil render Markdown di pesan bot */
+  .msg.bot p { margin: 6px 0; }
+  .msg.bot p:first-child { margin-top: 0; }
+  .msg.bot p:last-child { margin-bottom: 0; }
+  .msg.bot strong { color: var(--accent); }
+  .msg.bot ul, .msg.bot ol { margin: 6px 0; padding-left: 20px; }
+  .msg.bot li { margin: 3px 0; }
+  .msg.bot a { color: var(--accent); }
+  .msg.bot code {
+    background: rgba(0,0,0,0.3);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: 'Consolas', monospace;
+  }
+  .msg.bot pre {
+    background: rgba(0,0,0,0.3);
+    padding: 10px 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 8px 0;
+  }
+  .msg.bot pre code { background: none; padding: 0; }
+  .msg.bot table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 10px 0;
+    font-size: 13px;
+    display: block;
+    overflow-x: auto;
+  }
+  .msg.bot th, .msg.bot td {
+    border: 1px solid rgba(255,255,255,0.15);
+    padding: 6px 10px;
+    text-align: left;
+  }
+  .msg.bot th {
+    background: rgba(34,211,238,0.15);
+    font-weight: 600;
+  }
+  .msg.bot blockquote {
+    border-left: 3px solid var(--accent);
+    margin: 8px 0;
+    padding-left: 10px;
+    color: var(--muted);
+  }
+  .msg.bot hr {
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    margin: 10px 0;
+  }
+
+  .typing {
+    display: flex;
+    gap: 4px;
+    padding: 4px 0;
+  }
+  .typing span {
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: bounce 1s infinite;
+  }
+  .typing span:nth-child(2) { animation-delay: .15s; }
+  .typing span:nth-child(3) { animation-delay: .3s; }
+  @keyframes bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: .5; }
+    30% { transform: translateY(-5px); opacity: 1; }
+  }
+
+  .chips {
+    display: flex;
+    gap: 8px;
+    padding: 0 20px 12px;
+    overflow-x: auto;
+  }
+  .chip {
+    flex: 0 0 auto;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: var(--text);
+    padding: 7px 13px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: .15s;
+  }
+  .chip:hover { background: rgba(34,211,238,0.15); border-color: var(--accent); }
+
+  form {
+    display: flex;
+    gap: 10px;
+    padding: 16px;
+    background: rgba(255,255,255,0.04);
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  textarea {
+    flex: 1;
+    resize: none;
+    background: rgba(0,0,0,0.25);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: var(--text);
+    border-radius: 12px;
+    padding: 11px 14px;
+    font-size: 14px;
+    font-family: inherit;
+    max-height: 120px;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  button {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #052e4a;
+    border: none;
+    border-radius: 12px;
+    padding: 0 22px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: .15s;
+  }
+  button:hover { filter: brightness(1.1); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+</style>
+</head>
+<body>
+  <div class="bubbles" id="bubbles"></div>
+
+  <div class="app">
+    <header>
+      <div class="avatar">🐠</div>
+      <div>
+        <h1>AI Assistant</h1>
+        <p><span class="status-dot"></span>Powered by Nemotron · siap menyelam ke pertanyaanmu</p>
+      </div>
+    </header>
+
+    <div id="chat"></div>
+
+    <div class="chips" id="chips">
+      <div class="chip" data-text="Ceritakan fakta unik tentang laut">🌊 Fakta laut</div>
+      <div class="chip" data-text="Buatkan lelucon receh">😄 Lelucon receh</div>
+      <div class="chip" data-text="Jelaskan apa itu AI ke anak SD">🧠 Apa itu AI?</div>
+      <div class="chip" data-text="Berikan ide nama unik untuk project">✨ Ide kreatif</div>
+    </div>
+
+    <form id="chat-form">
+      <textarea id="input" rows="1" placeholder="Tulis pesann..." required></textarea>
+      <button id="send-btn" type="submit">Kirim</button>
+    </form>
+  </div>
+
+  <script>
+    // Buat gelembung dekoratif acak
+    const bubbleContainer = document.getElementById('bubbles');
+    for (let i = 0; i < 18; i++) {
+      const b = document.createElement('div');
+      b.className = 'bubble';
+      const size = 6 + Math.random() * 18;
+      b.style.width = b.style.height = size + 'px';
+      b.style.left = Math.random() * 100 + '%';
+      b.style.animationDuration = 8 + Math.random() * 10 + 's';
+      b.style.animationDelay = Math.random() * 8 + 's';
+      bubbleContainer.appendChild(b);
+    }
+
+    const chatEl = document.getElementById('chat');
+    const formEl = document.getElementById('chat-form');
+    const inputEl = document.getElementById('input');
+    const sendBtn = document.getElementById('send-btn');
+    const chipsEl = document.getElementById('chips');
+
+    const history = [];
+
+    // Konfigurasi marked.js: baris baru tunggal dianggap <br>
+    marked.setOptions({ breaks: true });
+
+    function addMessage(role, text) {
+      const div = document.createElement('div');
+      div.className = `msg ${role === 'user' ? 'user' : 'bot'}`;
+
+      if (role === 'user') {
+        // Pesan user: tampilkan sebagai teks biasa (aman, tidak dirender sebagai HTML)
+        div.textContent = text;
+      } else {
+        // Pesan bot: render Markdown (bold, tabel, list, dll) jadi HTML rapi
+        div.innerHTML = marked.parse(text);
+      }
+
+      chatEl.appendChild(div);
+      chatEl.scrollTop = chatEl.scrollHeight;
+      return div;
+    }
+
+    function addTyping() {
+      const div = document.createElement('div');
+      div.className = 'msg bot';
+      div.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
+      chatEl.appendChild(div);
+      chatEl.scrollTop = chatEl.scrollHeight;
+      return div;
+    }
+
+    // Pesan sambutan awal
+    addMessage('bot', 'Hai! Aku faizgtg 🐠 Ada yang bisa aku bantu hari ini?');
+
+    inputEl.addEventListener('input', () => {
+      inputEl.style.height = 'auto';
+      inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
+    });
+
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        formEl.requestSubmit();
+      }
+    });
+
+    chipsEl.addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip');
+      if (!chip) return;
+      inputEl.value = chip.dataset.text;
+      formEl.requestSubmit();
+    });
+
+    async function sendMessage(text) {
+      addMessage('user', text);
+      history.push({ role: 'user', content: text });
+
+      const typingEl = addTyping();
+      sendBtn.disabled = true;
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: history }),
+        });
+        const data = await res.json();
+
+        typingEl.remove();
+
+        if (!res.ok) {
+          addMessage('bot', `⚠️ ${data.error || 'Terjadi kesalahan.'}`);
+          return;
+        }
+
+        addMessage('bot', data.reply);
+        history.push({ role: 'assistant', content: data.reply });
+      } catch (err) {
+        typingEl.remove();
+        addMessage('bot', '⚠️ Gagal terhubung ke server.');
+      } finally {
+        sendBtn.disabled = false;
+        inputEl.focus();
+      }
+    }
+
+    formEl.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = inputEl.value.trim();
+      if (!text) return;
+      inputEl.value = '';
+      inputEl.style.height = 'auto';
+      sendMessage(text);
+    });
+  </script>
+</body>
+</html>
